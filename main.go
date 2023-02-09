@@ -33,13 +33,11 @@ type file struct {
 	authors []string
 }
 
-const week = time.Hour * 24 * 7
-
 var (
-	author = flag.String("author", "", "show only changes by this author")
+	author = flag.String("author", "", "only changes by this author")
+	days   = flag.Int("days", 7, "changes made in the last days")
 	dir    = flag.String("dir", ".", "directory containing git repos")
 	pull   = flag.Bool("pull", false, "pull the repo before parsing its logs")
-	since  = flag.Duration("since", week, "changes since duration ago")
 )
 
 func main() {
@@ -98,7 +96,8 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for dir := range in {
-				files, err := parseRepoLogs(dir.repo, pull, author, since)
+				since := time.Hour * 24 * time.Duration(*days)
+				files, err := parseRepoLogs(dir.repo, pull, author, &since)
 				if err != nil {
 					switch err.(type) {
 					case *pullError:
