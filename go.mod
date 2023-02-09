@@ -1,4 +1,4 @@
-module github.com/jreisinger/changes
+module github.com/jreisinger/workedon
 
 go 1.19
 

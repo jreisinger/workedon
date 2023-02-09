@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -19,25 +20,24 @@ import (
 )
 
 type directory struct {
-	path  string
-	repo  *git.Repository
-	files []file
+	path    string
+	changes int
+	authors []string
+	repo    *git.Repository
+	files   []file
 }
 
 type file struct {
-	path     string
-	changes  int
-	authors  []string
-	messages []string // first line only
+	path    string
+	changes int
+	authors []string
 }
 
 const week = time.Hour * 24 * 7
 
 var (
-	author = flag.String("author", "", "changes by this author")
+	author = flag.String("author", "", "show only changes by this author")
 	dir    = flag.String("dir", ".", "directory containing git repos")
-	files  = flag.Bool("files", false, "show also changed files")
-	msgs   = flag.Bool("msgs", false, "show also (1st line of) commit messages")
 	pull   = flag.Bool("pull", false, "pull the repo before parsing its logs")
 	since  = flag.Duration("since", week, "changes since duration ago")
 )
@@ -101,11 +101,15 @@ func main() {
 				files, err := parseRepoLogs(dir.repo, pull, author, since)
 				if err != nil {
 					switch err.(type) {
-					case *PullError:
+					case *pullError:
 						log.Printf("while pulling repo %s: %v", dir.path, err)
 					default:
 						log.Fatalf("while parsing repo %s: %v", dir.path, err)
 					}
+				}
+				for _, f := range files {
+					dir.changes += f.changes
+					dir.authors = append(dir.authors, f.authors...)
 				}
 				dir.files = files
 				out <- dir
@@ -118,57 +122,52 @@ func main() {
 		close(out)
 	}()
 
-	// Report results.
+	reportResults(out)
+}
+
+func reportResults(out chan directory) {
+	var totalChanges int
+	var directories []directory
 	for dir := range out {
-		reportResults(dir)
-	}
-}
-
-func reportResults(dir directory) {
-	// don't print directories without changes in files
-	if len(dir.files) == 0 {
-		return
-	}
-
-	var changes int
-	var authors []string
-	for _, f := range dir.files {
-		changes += f.changes
-		authors = append(authors, f.authors...)
-	}
-	fmt.Printf("%s: %d (%s)\n", dir.path, changes, strings.Join(uniq(authors), ", "))
-
-	if *files {
-		sort.Sort(sort.Reverse(byCount(dir.files)))
-		for _, f := range dir.files {
-			fmt.Printf("  %s: %d (%s)\n", f.path, f.changes, strings.Join(f.authors, ", "))
-			if *msgs {
-				for _, m := range f.messages {
-					fmt.Printf("    %s\n", m)
-				}
-			}
+		if len(dir.files) == 0 {
+			continue
 		}
+		totalChanges += dir.changes
+		directories = append(directories, dir)
 	}
+
+	const format = "%v\t%v\t%v\n"
+	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
+	fmt.Fprintf(tw, format, "DIRECTORY", "CHANGES", "AUTHORS")
+
+	sort.Sort(sort.Reverse(byChanges(directories)))
+	for _, dir := range directories {
+		changes := fmt.Sprintf("%2.0f%% (%d)", float64(dir.changes)/float64(totalChanges)*100, dir.changes)
+		authors := strings.Join(uniq(dir.authors), ", ")
+		fmt.Fprintf(tw, format, dir.path, changes, authors)
+	}
+
+	tw.Flush()
 }
 
-type byCount []file
+type byChanges []directory
 
-func (x byCount) Len() int           { return len(x) }
-func (x byCount) Less(i, j int) bool { return x[i].changes < x[j].changes }
-func (x byCount) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+func (x byChanges) Len() int           { return len(x) }
+func (x byChanges) Less(i, j int) bool { return x[i].changes < x[j].changes }
+func (x byChanges) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
-type PullError struct {
+type pullError struct {
 	Err error
 }
 
-func (e *PullError) Error() string {
+func (e *pullError) Error() string {
 	return fmt.Sprint(e.Err)
 }
 
 func parseRepoLogs(repo *git.Repository, pull *bool, author *string, since *time.Duration) (files []file, err error) {
 	if *pull {
 		if err := pullRepo(repo); err != nil {
-			return nil, &PullError{Err: err}
+			return nil, &pullError{Err: err}
 		}
 	}
 
@@ -211,10 +210,9 @@ func parseRepoLogs(repo *git.Repository, pull *bool, author *string, since *time
 
 	for f, c := range changesPerFile {
 		files = append(files, file{
-			path:     f,
-			changes:  c,
-			authors:  uniq(authorsPerFile[f]),
-			messages: uniq(msgsPerFile[f]),
+			path:    f,
+			changes: c,
+			authors: uniq(authorsPerFile[f]),
 		})
 	}
 
