@@ -149,8 +149,9 @@ func reportResults(out chan directory) {
 		if *inside {
 			sort.Sort(sort.Reverse(byFileChanges(dir.files)))
 			for _, f := range dir.files {
+				changes := fmt.Sprintf("%2.0f%% (%d)", float64(f.changes)/float64(totalChanges)*100, f.changes)
 				authors := strings.Join(uniq(f.authors), ", ")
-				fmt.Fprintf(tw, format, f.path, f.changes, authors)
+				fmt.Fprintf(tw, format, f.path, changes, authors)
 			}
 		} else {
 			changes := fmt.Sprintf("%2.0f%% (%d)", float64(dir.changes)/float64(totalChanges)*100, dir.changes)
