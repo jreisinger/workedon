@@ -1,1 +1,1 @@
-Workedon tells you what you (or others) have worked on. It gets this info from git commits.
+Workedon tells you what you (or others) have worked on. It gets this information from git commit logs.
