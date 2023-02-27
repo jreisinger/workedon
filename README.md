@@ -1,1 +1,1 @@
-Workedon walks through directories containing git repositories. It reports the number of changes (additions and deletions) and change authors for each repo.
+Workedon tells you what you (or others) have worked on. It gets this info from git commits.

@@ -37,6 +37,7 @@ var (
 	author = flag.String("author", "", "only changes by this author")
 	days   = flag.Int("days", 7, "changes made in the last days")
 	dir    = flag.String("dir", ".", "directory containing git repos")
+	inside = flag.Bool("inside", false, "you're inside a repo")
 	pull   = flag.Bool("pull", false, "pull the repo before parsing its logs")
 )
 
@@ -63,7 +64,7 @@ func main() {
 			}
 
 			if d.IsDir() {
-				repo, err := git.PlainOpen(path)
+				repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: *inside})
 				if err != nil {
 					// not a git repo root directory
 					if errors.Is(err, git.ErrRepositoryNotExists) {
@@ -135,25 +136,43 @@ func reportResults(out chan directory) {
 		directories = append(directories, dir)
 	}
 
+	if len(directories) == 0 {
+		return
+	}
+
 	const format = "%v\t%v\t%v\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "DIRECTORY", "CHANGES", "AUTHORS")
+	fmt.Fprintf(tw, format, "PATH", "CHANGES", "AUTHORS")
 
-	sort.Sort(sort.Reverse(byChanges(directories)))
+	sort.Sort(sort.Reverse(byDirChanges(directories)))
 	for _, dir := range directories {
-		changes := fmt.Sprintf("%2.0f%% (%d)", float64(dir.changes)/float64(totalChanges)*100, dir.changes)
-		authors := strings.Join(uniq(dir.authors), ", ")
-		fmt.Fprintf(tw, format, dir.path, changes, authors)
+		if *inside {
+			sort.Sort(sort.Reverse(byFileChanges(dir.files)))
+			for _, f := range dir.files {
+				authors := strings.Join(uniq(f.authors), ", ")
+				fmt.Fprintf(tw, format, f.path, f.changes, authors)
+			}
+		} else {
+			changes := fmt.Sprintf("%2.0f%% (%d)", float64(dir.changes)/float64(totalChanges)*100, dir.changes)
+			authors := strings.Join(uniq(dir.authors), ", ")
+			fmt.Fprintf(tw, format, dir.path, changes, authors)
+		}
 	}
 
 	tw.Flush()
 }
 
-type byChanges []directory
+type byFileChanges []file
 
-func (x byChanges) Len() int           { return len(x) }
-func (x byChanges) Less(i, j int) bool { return x[i].changes < x[j].changes }
-func (x byChanges) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+func (x byFileChanges) Len() int           { return len(x) }
+func (x byFileChanges) Less(i, j int) bool { return x[i].changes < x[j].changes }
+func (x byFileChanges) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+
+type byDirChanges []directory
+
+func (x byDirChanges) Len() int           { return len(x) }
+func (x byDirChanges) Less(i, j int) bool { return x[i].changes < x[j].changes }
+func (x byDirChanges) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
 type pullError struct {
 	Err error
