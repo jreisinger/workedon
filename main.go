@@ -33,7 +33,7 @@ type file struct {
 }
 
 var (
-	author = flag.String("author", "", "only changes by this author")
+	author = flag.String("author", "", "only changes by `this` author")
 	days   = flag.Int("days", 7, "changes made in last `n` days")
 	files  = flag.Bool("files", false, "changes per file (default is per repo)")
 	pull   = flag.Bool("pull", false, "pull the repo before parsing its logs")
