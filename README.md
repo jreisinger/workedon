@@ -5,7 +5,7 @@ Workedon tells you what you (or others) have worked on. It gets this information
 What you (or others) have worked on.
 
 workedon [flags] repo [repo ...]
-  -author string
+  -author this
     	only changes by this author
   -days n
     	changes made in last n days (default 7)
