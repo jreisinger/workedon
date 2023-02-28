@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -35,16 +34,27 @@ type file struct {
 
 var (
 	author = flag.String("author", "", "only changes by this author")
-	days   = flag.Int("days", 7, "changes made in the last days")
-	dir    = flag.String("dir", ".", "directory containing git repos")
-	inside = flag.Bool("inside", false, "you're inside a repo")
+	days   = flag.Int("days", 7, "changes made in last `n` days")
+	files  = flag.Bool("files", false, "changes per file (default is per repo)")
 	pull   = flag.Bool("pull", false, "pull the repo before parsing its logs")
 )
 
 func main() {
-	flag.Parse()
 	log.SetFlags(0)
 	log.SetPrefix(os.Args[0] + ": ")
+
+	flag.Usage = func() {
+		desc := "What you (or others) have worked on."
+		fmt.Fprintf(flag.CommandLine.Output(), "%s\n\n%s [flags] repo [repo ...]\n", desc, os.Args[0])
+		flag.PrintDefaults()
+	}
+
+	flag.Parse()
+
+	if len(flag.Args()) == 0 {
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	in := make(chan directory)
 	out := make(chan directory)
@@ -58,36 +68,17 @@ func main() {
 		defer wg.Done()
 		defer close(in)
 
-		visit := func(path string, d fs.DirEntry, err error) error {
+		for _, path := range flag.Args() {
+			repo, err := git.PlainOpen(path)
 			if err != nil {
-				return err
+				log.Printf("%s: %v", path, err)
+				continue
 			}
 
-			if d.IsDir() {
-				repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: *inside})
-				if err != nil {
-					// not a git repo root directory
-					if errors.Is(err, git.ErrRepositoryNotExists) {
-						return nil
-					}
-
-					return err
-				}
-
-				in <- directory{
-					path: path,
-					repo: repo,
-				}
-
-				// don't descend into git repo subdirectories
-				return filepath.SkipDir
+			in <- directory{
+				path: path,
+				repo: repo,
 			}
-
-			return nil
-		}
-
-		if err := filepath.WalkDir(*dir, visit); err != nil {
-			log.Fatal(err)
 		}
 	}()
 
@@ -146,12 +137,12 @@ func reportResults(out chan directory) {
 
 	sort.Sort(sort.Reverse(byDirChanges(directories)))
 	for _, dir := range directories {
-		if *inside {
+		if *files {
 			sort.Sort(sort.Reverse(byFileChanges(dir.files)))
 			for _, f := range dir.files {
 				changes := fmt.Sprintf("%2.0f%% (%d)", float64(f.changes)/float64(totalChanges)*100, f.changes)
 				authors := strings.Join(uniq(f.authors), ", ")
-				fmt.Fprintf(tw, format, f.path, changes, authors)
+				fmt.Fprintf(tw, format, filepath.Join(dir.path, f.path), changes, authors)
 			}
 		} else {
 			changes := fmt.Sprintf("%2.0f%% (%d)", float64(dir.changes)/float64(totalChanges)*100, dir.changes)
