@@ -94,9 +94,9 @@ func main() {
 				if err != nil {
 					switch err.(type) {
 					case *pullError:
-						log.Printf("while pulling repo %s: %v", dir.path, err)
+						log.Printf("pulling repo %s: %v", dir.path, err)
 					default:
-						log.Fatalf("while parsing repo %s: %v", dir.path, err)
+						log.Fatalf("parsing repo %s: %v", dir.path, err)
 					}
 				}
 				for _, f := range files {
