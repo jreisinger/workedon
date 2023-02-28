@@ -61,7 +61,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Get directories containing a git repo.
+	// Send directories containing a git repo down the in channel.
 	wg.Add(1)
 	go func() {
 		// LIFO order!
@@ -82,7 +82,8 @@ func main() {
 		}
 	}()
 
-	// Parse repos' logs for changes.
+	// Get directories from the in channel, enrich them with info from
+	// parsed repo logs and send them down the out channel.
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
